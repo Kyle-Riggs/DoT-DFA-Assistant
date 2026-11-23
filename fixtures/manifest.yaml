@@ -1,0 +1,309 @@
+# Fixture manifest with ground truth (evidence E-01).
+#
+# Every fixture is a synthetic driver folder: fictitious driver, fictitious
+# documents, no real personal data (NFR-01). The expected outcomes below are
+# written by hand from the regulation and the design, NOT computed by the
+# system under test. They state the outcome of each applicable rule entry
+# assuming every readable document's type and dates have been validated as
+# truth, and that no reviewer has linked an unreadable file to an item.
+#
+# Conventions
+#   - Folder name = fixture id = driver reference. One file = one document
+#     (PR-01). Fixtures are PNG page images, so every readable document is a
+#     single page. Multi-page and encrypted-PDF cases are deferred until PDF
+#     fixtures are added.
+#   - Interval rules are inclusive (PR-11): an item dated exactly N months
+#     before the evaluation date is still current. Expiry rules are current
+#     through the expiration date itself.
+#   - read_state: readable | illegible (opens but unreadable) | corrupt | zero_byte.
+#   - outcome: satisfied | missing | out_of_date | unresolved.
+#   - severity is stated only for non-satisfied outcomes.
+#   - "superseded" lists other documents that could satisfy a rule but were not
+#     selected; they produce no finding (PR-10).
+#   - "unreadable_findings" lists files that yield their own recordkeeping
+#     "unreadable" finding (PR-12, PR-13).
+
+manifest_version: 1
+rule_set: { rule_set_id: cfr49-391.51-interstate-property, version: "1" }
+evaluation_date: 2026-06-15
+
+_defs:
+  # --- shared documents ---------------------------------------------------
+  app: &app { file: application.png, type: application, pages: 1, read_state: readable, dates: {} }
+  road: &road { file: road-test.png, type: road_test_certificate, pages: 1, read_state: readable, dates: {} }
+  reg: &reg { file: registry-note.png, type: registry_verification_note, pages: 1, read_state: readable, dates: {} }
+  variance: &variance { file: variance-certificate.png, type: variance_certificate, pages: 1, read_state: readable, dates: {} }
+  mvr_hire: &mvr_hire { file: mvr-hire.png, type: motor_vehicle_record, pages: 1, read_state: readable, dates: { inquiry_date: 2024-03-04 } }
+  mvr_annual: &mvr_annual { file: mvr-annual.png, type: motor_vehicle_record, pages: 1, read_state: readable, dates: { inquiry_date: 2026-02-10 } }
+  review: &review { file: annual-review.png, type: annual_review_note, pages: 1, read_state: readable, dates: { review_date: 2026-02-12 } }
+  medcert: &medcert { file: medical-certificate.png, type: medical_examiner_certificate, pages: 1, read_state: readable, dates: { expiration_date: 2027-01-20 } }
+  # CDLIS motor vehicle records carry the medical certification expiration.
+  mvr_hire_cdl: &mvr_hire_cdl { file: mvr-hire.png, type: motor_vehicle_record, pages: 1, read_state: readable, dates: { inquiry_date: 2024-03-04, medical_certification_expiration_date: 2025-03-10 } }
+  mvr_annual_cdl: &mvr_annual_cdl { file: mvr-annual.png, type: motor_vehicle_record, pages: 1, read_state: readable, dates: { inquiry_date: 2026-02-10, medical_certification_expiration_date: 2027-02-01 } }
+
+  # --- shared expected outcomes (all current, all satisfied) ---------------
+  exp_noncdl_ok: &exp_noncdl_ok
+    RS-01: { outcome: satisfied, governing: application.png }
+    RS-02: { outcome: satisfied, governing: mvr-hire.png, superseded: [mvr-annual.png] }
+    RS-03: { outcome: satisfied, governing: road-test.png }
+    RS-04: { outcome: satisfied, governing: mvr-annual.png, superseded: [mvr-hire.png] }
+    RS-05: { outcome: satisfied, governing: annual-review.png }
+    RS-06: { outcome: satisfied, governing: medical-certificate.png }
+    RS-09: { outcome: satisfied, governing: registry-note.png }
+  exp_cdl_ok: &exp_cdl_ok
+    RS-01: { outcome: satisfied, governing: application.png }
+    RS-02: { outcome: satisfied, governing: mvr-hire.png, superseded: [mvr-annual.png] }
+    RS-03: { outcome: satisfied, governing: road-test.png }
+    RS-04: { outcome: satisfied, governing: mvr-annual.png, superseded: [mvr-hire.png] }
+    RS-05: { outcome: satisfied, governing: annual-review.png }
+    RS-07: { outcome: satisfied, governing: mvr-annual.png, superseded: [mvr-hire.png] }
+
+fixtures:
+  # ======================= Appendix A.1 scenarios ==========================
+  - id: sc01-control
+    scenario: SC-01
+    description: Control folder. Every required document present, current, and legible.
+    driver_class: non_cdl
+    medical_variance: false
+    documents: [*app, *mvr_hire, *road, *mvr_annual, *review, *medcert, *reg]
+    expected: *exp_noncdl_ok
+    escalation: []
+
+  - id: sc02a-noncdl-medical-expired
+    scenario: SC-02a
+    description: Non-CDL driver. Medical examiner's certificate expired four months before the evaluation date.
+    driver_class: non_cdl
+    medical_variance: false
+    documents:
+      - *app
+      - *mvr_hire
+      - *road
+      - *mvr_annual
+      - *review
+      - { <<: *medcert, dates: { expiration_date: 2026-02-15 } }
+      - *reg
+    expected:
+      <<: *exp_noncdl_ok
+      RS-06: { outcome: out_of_date, severity: disqualifying, governing: medical-certificate.png }
+    escalation: [RS-06]
+
+  - id: sc02b-cdl-medical-lapsed
+    scenario: SC-02b
+    description: CDL driver. The CDLIS motor vehicle record shows medical certification lapsed.
+    driver_class: cdl
+    medical_variance: false
+    documents:
+      - *app
+      - *mvr_hire_cdl
+      - *road
+      - { <<: *mvr_annual_cdl, dates: { inquiry_date: 2026-02-10, medical_certification_expiration_date: 2026-02-15 } }
+      - *review
+    expected:
+      <<: *exp_cdl_ok
+      RS-07: { outcome: out_of_date, severity: disqualifying, governing: mvr-annual.png, superseded: [mvr-hire.png] }
+    escalation: [RS-07]
+
+  - id: sc03-mixed-deficiencies
+    scenario: SC-03
+    description: Stale annual review, illegible road test certificate, absent application. Three distinct kinds of finding.
+    driver_class: non_cdl
+    medical_variance: false
+    documents:
+      - *mvr_hire
+      - { <<: *road, read_state: illegible }
+      - *mvr_annual
+      - { <<: *review, dates: { review_date: 2025-04-10 } }
+      - *medcert
+      - *reg
+    expected:
+      <<: *exp_noncdl_ok
+      RS-01: { outcome: missing, severity: recordkeeping }
+      RS-03: { outcome: missing, severity: recordkeeping }
+      RS-05: { outcome: out_of_date, severity: recordkeeping, governing: annual-review.png }
+    unreadable_findings: [road-test.png]
+    # Once the reviewer links the illegible file to the road test item, the item is unresolved (PR-12).
+    after_reviewer_link:
+      RS-03: { outcome: unresolved, severity: recordkeeping, linked: road-test.png }
+    escalation: []
+
+  # ============================ Boundary set ===============================
+  # Evaluation date 2026-06-15: 11, 12, 13 months earlier are 2025-07-15, 2025-06-15, 2025-05-15.
+  - id: bnd-annual-11mo
+    scenario: boundary
+    description: Annual inquiry and annual review dated 11 months before the evaluation date. Current.
+    driver_class: non_cdl
+    medical_variance: false
+    documents:
+      - *app
+      - *mvr_hire
+      - *road
+      - { <<: *mvr_annual, dates: { inquiry_date: 2025-07-15 } }
+      - { <<: *review, dates: { review_date: 2025-07-15 } }
+      - *medcert
+      - *reg
+    expected: *exp_noncdl_ok
+    escalation: []
+
+  - id: bnd-annual-12mo
+    scenario: boundary
+    description: Annual inquiry and annual review dated exactly 12 months before the evaluation date. Still current (inclusive).
+    driver_class: non_cdl
+    medical_variance: false
+    documents:
+      - *app
+      - *mvr_hire
+      - *road
+      - { <<: *mvr_annual, dates: { inquiry_date: 2025-06-15 } }
+      - { <<: *review, dates: { review_date: 2025-06-15 } }
+      - *medcert
+      - *reg
+    expected: *exp_noncdl_ok
+    escalation: []
+
+  - id: bnd-annual-13mo
+    scenario: boundary
+    description: Annual inquiry and annual review dated 13 months before the evaluation date. Out of date.
+    driver_class: non_cdl
+    medical_variance: false
+    documents:
+      - *app
+      - *mvr_hire
+      - *road
+      - { <<: *mvr_annual, dates: { inquiry_date: 2025-05-15 } }
+      - { <<: *review, dates: { review_date: 2025-05-15 } }
+      - *medcert
+      - *reg
+    expected:
+      <<: *exp_noncdl_ok
+      RS-04: { outcome: out_of_date, severity: recordkeeping, governing: mvr-annual.png, superseded: [mvr-hire.png] }
+      RS-05: { outcome: out_of_date, severity: recordkeeping, governing: annual-review.png }
+    escalation: []
+
+  - id: bnd-medical-expires-on-evaluation-date
+    scenario: boundary
+    description: Medical examiner's certificate expires on the evaluation date itself. Still current.
+    driver_class: non_cdl
+    medical_variance: false
+    documents:
+      - *app
+      - *mvr_hire
+      - *road
+      - *mvr_annual
+      - *review
+      - { <<: *medcert, dates: { expiration_date: 2026-06-15 } }
+      - *reg
+    expected: *exp_noncdl_ok
+    escalation: []
+
+  # ============================ Degraded set ===============================
+  # Encrypted-file cases are deferred until PDF fixtures are added.
+  - id: deg-unreadable-files
+    scenario: degraded
+    description: A zero-byte application and a corrupt road test certificate. Each is registered, never dropped, and yields its own unreadable finding.
+    driver_class: non_cdl
+    medical_variance: false
+    documents:
+      - { <<: *app, pages: 0, read_state: zero_byte }
+      - *mvr_hire
+      - { <<: *road, pages: 0, read_state: corrupt }
+      - *mvr_annual
+      - *review
+      - *medcert
+      - *reg
+    expected:
+      <<: *exp_noncdl_ok
+      RS-01: { outcome: missing, severity: recordkeeping }
+      RS-03: { outcome: missing, severity: recordkeeping }
+    unreadable_findings: [application.png, road-test.png]
+    escalation: []
+
+  - id: deg-scans
+    scenario: degraded
+    description: Skewed, low-resolution, and partially obscured scans. Truth is unchanged from the control; this fixture measures extraction accuracy (E-05).
+    driver_class: non_cdl
+    medical_variance: false
+    documents:
+      - { <<: *app, degradation: [skew] }
+      - { <<: *mvr_hire, degradation: [low_resolution] }
+      - { <<: *road, degradation: [occlusion_partial] }
+      - { <<: *mvr_annual, degradation: [skew, low_resolution] }
+      - { <<: *review, degradation: [occlusion_partial] }
+      - { <<: *medcert, degradation: [low_resolution] }
+      - { <<: *reg, degradation: [skew] }
+    expected: *exp_noncdl_ok
+    escalation: []
+
+  # =========================== Superseded set ==============================
+  - id: sup-expired-and-current-medical
+    scenario: superseded
+    description: An expired medical certificate filed beside its current replacement. The current one governs; the expired one produces no finding.
+    driver_class: non_cdl
+    medical_variance: false
+    documents:
+      - *app
+      - *mvr_hire
+      - *road
+      - *mvr_annual
+      - *review
+      - { <<: *medcert, file: medical-certificate-old.png, dates: { expiration_date: 2025-03-01 } }
+      - *medcert
+      - *reg
+    expected:
+      <<: *exp_noncdl_ok
+      RS-06: { outcome: satisfied, governing: medical-certificate.png, superseded: [medical-certificate-old.png] }
+    escalation: []
+
+  # ========================= Class-mismatch set ============================
+  # Driver class comes from the run request, never from extraction (PR-02, FR-21).
+  - id: cls-cdl-entered-as-noncdl
+    scenario: class_mismatch
+    description: Documents of a CDL holder, run entered as non-CDL. The system applies the entered class and does not infer the true one.
+    driver_class: non_cdl
+    true_class: cdl
+    medical_variance: false
+    documents: [*app, *mvr_hire_cdl, *road, *mvr_annual_cdl, *review]
+    expected:
+      <<: *exp_noncdl_ok
+      RS-06: { outcome: missing, severity: disqualifying }
+      RS-09: { outcome: missing, severity: recordkeeping }
+    escalation: [RS-06]
+
+  - id: cls-noncdl-entered-as-cdl
+    scenario: class_mismatch
+    description: Documents of a non-CDL holder, run entered as CDL. No motor vehicle record carries a medical certification expiration, so RS-07 has no qualifying document.
+    driver_class: cdl
+    true_class: non_cdl
+    medical_variance: false
+    documents: [*app, *mvr_hire, *road, *mvr_annual, *review, *medcert, *reg]
+    expected:
+      RS-01: { outcome: satisfied, governing: application.png }
+      RS-02: { outcome: satisfied, governing: mvr-hire.png, superseded: [mvr-annual.png] }
+      RS-03: { outcome: satisfied, governing: road-test.png }
+      RS-04: { outcome: satisfied, governing: mvr-annual.png, superseded: [mvr-hire.png] }
+      RS-05: { outcome: satisfied, governing: annual-review.png }
+      RS-07: { outcome: missing, severity: disqualifying }
+    unmatched: [medical-certificate.png, registry-note.png]
+    escalation: [RS-07]
+
+  # ========================== Medical variance =============================
+  - id: var-declared-certificate-missing
+    scenario: variance
+    description: Medical variance declared at run start, no variance documentation in the folder.
+    driver_class: non_cdl
+    medical_variance: true
+    documents: [*app, *mvr_hire, *road, *mvr_annual, *review, *medcert, *reg]
+    expected:
+      <<: *exp_noncdl_ok
+      RS-08: { outcome: missing, severity: recordkeeping }
+    escalation: []
+
+  - id: var-declared-certificate-present
+    scenario: variance
+    description: Medical variance declared at run start, variance documentation present.
+    driver_class: non_cdl
+    medical_variance: true
+    documents: [*app, *mvr_hire, *road, *mvr_annual, *review, *medcert, *reg, *variance]
+    expected:
+      <<: *exp_noncdl_ok
+      RS-08: { outcome: satisfied, governing: variance-certificate.png }
+    escalation: []
