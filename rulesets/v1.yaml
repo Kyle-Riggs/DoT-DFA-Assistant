@@ -1,0 +1,128 @@
+# Rule set version 1 — 49 CFR § 391.51(b) for an interstate, property-carrying,
+# non-hazardous-materials motor carrier.
+#
+# Versions are immutable: an edit creates a new version file, never a change to
+# this one. "Unresolved" carries the same severity as "missing".
+
+rule_set_id: cfr49-391.51-interstate-property
+version: "1"
+description: >-
+  Required contents of the driver qualification file under 49 CFR § 391.51(b),
+  for an interstate, property-carrying, non-hazardous-materials carrier.
+
+# The closed vocabulary of document types and the date fields declared for each.
+# Extraction may propose only these types and fields (anything else is refused
+# at the gate). "unclassified" is implicit and reserved for the system.
+document_types:
+  application:
+    label: Application for employment
+    date_fields: []
+  motor_vehicle_record:
+    label: Motor vehicle record
+    date_fields: [inquiry_date, medical_certification_expiration_date]
+  road_test_certificate:
+    label: Road test certificate or accepted equivalent
+    date_fields: []
+  annual_review_note:
+    label: Note of the annual review of the driving record
+    date_fields: [review_date]
+  medical_examiner_certificate:
+    label: Medical examiner's certificate
+    date_fields: [expiration_date]
+  variance_certificate:
+    label: Medical variance or Skill Performance Evaluation certificate
+    date_fields: []
+  registry_verification_note:
+    label: Note verifying the examiner's National Registry listing
+    date_fields: []
+
+rules:
+  - rule_id: RS-01
+    citation: "§ 391.51(b)(1)"
+    required_item: Application for employment
+    applies_to: both
+    satisfied_by: [application]
+    selection: null
+    currency: { kind: none }
+    severity_if_missing: recordkeeping
+    severity_if_out_of_date: null
+
+  - rule_id: RS-02
+    citation: "§ 391.51(b)(2)"
+    required_item: Motor vehicle record at hire
+    applies_to: both
+    satisfied_by: [motor_vehicle_record]
+    selection: { order: earliest, by: inquiry_date }
+    currency: { kind: none }
+    severity_if_missing: recordkeeping
+    severity_if_out_of_date: null
+
+  - rule_id: RS-03
+    citation: "§ 391.51(b)(3)"
+    required_item: Road test certificate or accepted equivalent
+    applies_to: both
+    satisfied_by: [road_test_certificate]
+    selection: null
+    currency: { kind: none }
+    severity_if_missing: recordkeeping
+    severity_if_out_of_date: null
+
+  - rule_id: RS-04
+    citation: "§ 391.51(b)(4)"
+    required_item: Motor vehicle record from the annual inquiry
+    applies_to: both
+    satisfied_by: [motor_vehicle_record]
+    selection: { order: latest, by: inquiry_date }
+    currency: { kind: months_from, date_field: inquiry_date, months: 12, basis: "§ 391.25(a)" }
+    severity_if_missing: recordkeeping
+    severity_if_out_of_date: recordkeeping
+
+  - rule_id: RS-05
+    citation: "§ 391.51(b)(5)"
+    required_item: Note of the annual review of the driving record
+    applies_to: both
+    satisfied_by: [annual_review_note]
+    selection: { order: latest, by: review_date }
+    currency: { kind: months_from, date_field: review_date, months: 12, basis: "§ 391.25(b)" }
+    severity_if_missing: recordkeeping
+    severity_if_out_of_date: recordkeeping
+
+  - rule_id: RS-06
+    citation: "§ 391.51(b)(6)(i)"
+    required_item: Medical examiner's certificate
+    applies_to: non_cdl
+    satisfied_by: [medical_examiner_certificate]
+    selection: { order: latest, by: expiration_date }
+    currency: { kind: expiration, date_field: expiration_date }
+    severity_if_missing: disqualifying
+    severity_if_out_of_date: disqualifying
+
+  - rule_id: RS-07
+    citation: "§ 391.51(b)(6)(ii)"
+    required_item: CDLIS motor vehicle record carrying medical certification status
+    applies_to: cdl
+    satisfied_by: [motor_vehicle_record]
+    selection: { order: latest, by: medical_certification_expiration_date }
+    currency: { kind: expiration, date_field: medical_certification_expiration_date }
+    severity_if_missing: disqualifying
+    severity_if_out_of_date: disqualifying
+
+  - rule_id: RS-08
+    citation: "§ 391.51(b)(6)(iii), (b)(7)"
+    required_item: Medical variance documentation
+    applies_to: variance_declared
+    satisfied_by: [variance_certificate]
+    selection: null
+    currency: { kind: none }
+    severity_if_missing: recordkeeping
+    severity_if_out_of_date: null
+
+  - rule_id: RS-09
+    citation: "§ 391.51(b)(8)(i)"
+    required_item: Note verifying the examiner's National Registry listing
+    applies_to: non_cdl
+    satisfied_by: [registry_verification_note]
+    selection: null
+    currency: { kind: none }
+    severity_if_missing: recordkeeping
+    severity_if_out_of_date: null
